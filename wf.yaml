@@ -1,0 +1,89 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: test-
+spec:
+  entrypoint: test
+  templates:
+  - name: condition-1
+    outputs:
+      artifacts:
+      - {name: example-b-result_b, from: '{{tasks.example-b.outputs.artifacts.example-b-result_b}}'}
+    dag:
+      tasks:
+      - {name: example-b, template: example-b}
+  - name: condition-2
+    outputs:
+      artifacts:
+      - {name: example-b-2-result_b, from: '{{tasks.example-b-2.outputs.artifacts.example-b-2-result_b}}'}
+    dag:
+      tasks:
+      - {name: example-b-2, template: example-b-2}
+  - name: example-a
+    container:
+      args: [runa, --condition_b1, /tmp/outputs/condition_b1/data,
+        --condition_b2, /tmp/outputs/condition_b2/data]
+      command: [python, -u, -m]
+      image: ascpforecasting/test:0.0.1
+      workingDir: /pipelines
+    outputs:
+      parameters:
+      - name: example-a-condition_b1
+        valueFrom: {path: /tmp/outputs/condition_b1/data}
+      - name: example-a-condition_b2
+        valueFrom: {path: /tmp/outputs/condition_b2/data}
+      artifacts:
+      - {name: example-a-condition_b1, path: /tmp/outputs/condition_b1/data}
+      - {name: example-a-condition_b2, path: /tmp/outputs/condition_b2/data}
+  - name: example-b
+    container:
+      args: [runb, --type_b, bbb1, --result_b, /tmp/outputs/result_b/data]
+      command: [python, -u, -m]
+      image: ascpforecasting/test:0.0.1
+      workingDir: /pipelines
+    outputs:
+      artifacts:
+      - {name: example-b-result_b, path: /tmp/outputs/result_b/data}
+  - name: example-b-2
+    container:
+      args: [runb, --type_b, bbb2, --result_b, /tmp/outputs/result_b/data]
+      command: [python, -u, -m]
+      image: ascpforecasting/test:0.0.1
+      workingDir: /pipelines
+    outputs:
+      artifacts:
+      - {name: example-b-2-result_b, path: /tmp/outputs/result_b/data}
+  - name: example-c
+    container:
+      args: [runc, --result_b1, /tmp/inputs/result_b1/data,
+        --result_b2, /tmp/inputs/result_b2/data]
+      command: [python, -u, -m]
+      image: ascpforecasting/test:0.0.1
+      workingDir: /pipelines
+    inputs:
+      artifacts:
+      - {name: example-b-result_b, optional: true,  path: /tmp/inputs/result_b1/data}
+      - {name: example-b-2-result_b,  optional: true, path: /tmp/inputs/result_b2/data}
+  - name: test
+    dag:
+      tasks:
+      - name: condition-1
+        template: condition-1
+        when: '"{{tasks.example-a.outputs.parameters.example-a-condition_b1}}" ==
+          "true"'
+        dependencies: [example-a]
+      - name: condition-2
+        template: condition-2
+        when: '"{{tasks.example-a.outputs.parameters.example-a-condition_b2}}" ==
+          "true"'
+        dependencies: [example-a]
+      - {name: example-a, template: example-a}
+      - name: example-c
+        template: example-c
+        dependencies: [condition-1, condition-2]
+        arguments:
+          artifacts:
+          - {name: example-b-2-result_b, optional: true, from: '{{tasks.condition-2.outputs.artifacts.example-b-2-result_b}}'}
+          - {name: example-b-result_b, optional: true, from: '{{tasks.condition-1.outputs.artifacts.example-b-result_b}}'}
+  arguments:
+    parameters: []
